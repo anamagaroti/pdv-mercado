@@ -1,0 +1,10 @@
+services:
+  firebird:
+    image: dimenziokft/firebird:2.5.9-sc
+    container_name: firebird25
+    ports:
+      - "3050:3050"
+    environment:
+      ISC_PASSWORD: masterkey
+    volumes:
+      - /Users/anamagaroti/Documents:/firebird/data

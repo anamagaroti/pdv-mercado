@@ -1,0 +1,262 @@
+import { query } from "../../db/firebirdPool";
+import { linhaParaProduto, CAMPO_PARA_COLUNA, valorParaColuna } from "./produtos.mapper";
+import { Produto, ProdutoEditavel, NovoProdutoInput } from "../../types/produto";
+
+// Se o nome real da tabela no seu Firebird for diferente (ex.: "PRODUTO",
+// singular), ajuste só aqui.
+const TABELA = "PRODUTOS";
+
+/**
+ * PRODUTOS tem 3 FKs (SITUACAOTRIBUTARIAIDO, GRUPOIMPOSTOIDO,
+ * GRUPOPISCOFINSIDO). Se o valor enviado não existir na tabela referenciada,
+ * o Firebird recusa o INSERT/UPDATE com uma mensagem técnica sobre a
+ * constraint. Aqui a gente traduz isso pra algo que o usuário entende.
+ */
+function traduzirErroDeEscrita(erro: any): Error {
+  const msg = String(erro?.message ?? "");
+  if (/FK_PRODUTOS_SITUACAOTRIBUTARIA/i.test(msg)) {
+    return new Error(
+      "Situação tributária inválida: esse código não existe na tabela SITUACAOTRIBUTARIA."
+    );
+  }
+  if (/FK_PRODUTOS_GRUPOIMPOSTO/i.test(msg)) {
+    return new Error("Grupo de imposto inválido: esse código não existe na tabela GRUPOIMPOSTO.");
+  }
+  if (/FK_PRODUTOS_GERUPOPISCOFINS/i.test(msg)) {
+    return new Error(
+      "Grupo de PIS/COFINS inválido: esse código não existe na tabela GRUPOPISCOFINS."
+    );
+  }
+  return erro instanceof Error ? erro : new Error(msg || "Erro ao gravar no Firebird.");
+}
+
+export async function buscarPorCodigoBarras(codigoBarras: string): Promise<Produto | undefined> {
+  const linhas = await query(
+    `SELECT * FROM ${TABELA} WHERE CODIGOBARRA = ?`,
+    [codigoBarras.trim()]
+  );
+  return linhas[0] ? linhaParaProduto(linhas[0]) : undefined;
+}
+
+export async function buscarPorId(id: number): Promise<Produto | undefined> {
+  const linhas = await query(`SELECT * FROM ${TABELA} WHERE PRODUTOIDO = ?`, [id]);
+  return linhas[0] ? linhaParaProduto(linhas[0]) : undefined;
+}
+
+export interface FiltrosListagem {
+  pagina?: number;
+  tamanhoPagina?: number;
+  termo?: string; // busca livre em descrição/código de barras/ncm
+  semNcm?: boolean;
+  semSituacaoTributaria?: boolean;
+}
+
+export interface ResultadoListagem {
+  produtos: Produto[];
+  total: number;
+  pagina: number;
+  tamanhoPagina: number;
+}
+
+function montarCondicoes(filtros: FiltrosListagem): { where: string; params: any[] } {
+  const condicoes: string[] = [];
+  const params: any[] = [];
+
+  if (filtros.termo && filtros.termo.trim()) {
+    // codigo_interno e marca não existem mais no Firebird, então saem da busca
+    condicoes.push("(DESCRICAO LIKE ? OR CODIGOBARRA LIKE ? OR CLASSFICACAOFISCAL LIKE ?)");
+    const like = `%${filtros.termo.trim()}%`;
+    params.push(like, like, like);
+  }
+  if (filtros.semNcm) {
+    condicoes.push("(CLASSFICACAOFISCAL IS NULL OR TRIM(CLASSFICACAOFISCAL) = '')");
+  }
+  if (filtros.semSituacaoTributaria) {
+    condicoes.push("(SITUACAOTRIBUTARIAIDO IS NULL OR TRIM(SITUACAOTRIBUTARIAIDO) = '')");
+  }
+
+  const where = condicoes.length ? `WHERE ${condicoes.join(" AND ")}` : "";
+  return { where, params };
+}
+
+export async function listar(filtros: FiltrosListagem = {}): Promise<ResultadoListagem> {
+  const pagina = Math.max(1, filtros.pagina ?? 1);
+  const tamanhoPagina = Math.min(200, Math.max(1, filtros.tamanhoPagina ?? 50));
+  const offset = (pagina - 1) * tamanhoPagina;
+
+  const { where, params } = montarCondicoes(filtros);
+
+  const totalLinhas = await query(`SELECT COUNT(*) AS TOTAL FROM ${TABELA} ${where}`, params);
+  const total = Number(totalLinhas[0]?.TOTAL ?? 0);
+
+  // Firebird não tem LIMIT/OFFSET: usa FIRST <n> SKIP <m>.
+  // Sem atualizado_em (não existe mais), ordena por descrição.
+  const linhas = await query(
+    `SELECT FIRST ? SKIP ? * FROM ${TABELA} ${where} ORDER BY DESCRICAO`,
+    [tamanhoPagina, offset, ...params]
+  );
+
+  return {
+    produtos: linhas.map(linhaParaProduto),
+    total,
+    pagina,
+    tamanhoPagina,
+  };
+}
+
+/** Igual a listar(), mas sem paginação — usado na exportação para XLSX. */
+export async function listarParaExportacao(
+  filtros: Omit<FiltrosListagem, "pagina" | "tamanhoPagina"> = {}
+): Promise<Produto[]> {
+  const { where, params } = montarCondicoes(filtros);
+  const linhas = await query(`SELECT * FROM ${TABELA} ${where} ORDER BY DESCRICAO`, params);
+  return linhas.map(linhaParaProduto);
+}
+
+export async function criar(dados: NovoProdutoInput): Promise<Produto> {
+  try {
+    const linhas = await query<{ ID: number }>(
+  `SELECT COALESCE(MAX(PRODUTOIDO), 0) + 1 AS ID
+   FROM PRODUTOS`
+);
+
+const novoId = Number(linhas[0].ID);
+
+    await query(
+      `INSERT INTO ${TABELA}
+        (
+          PRODUTOIDO,
+          DESCRICAO,
+          UNIDADEMEDIDA,
+          VALORVENDA,
+          CODIGOBARRA,
+          ITEMATIVO,
+          PRODUTOCOMPOSTO,
+          PRECOPROMOCIONAL,
+          PRODUTOEMPROMOCAO,
+          DESCONTOMAXIMO,
+          SITUACAOTRIBUTARIAIDO,
+          GRUPOIMPOSTOIDO,
+          GRUPOPISCOFINSIDO,
+          CLASSFICACAOFISCAL,
+          CODIGOCEST,
+          ORIGEMPRODUTO
+        )
+       VALUES (
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+       )`,
+      [
+        novoId,
+        dados.descricao,
+        dados.unidade ?? "UN",
+        dados.preco,
+        dados.codigo_barras,
+        dados.ativo === false ? "N" : "S",
+        dados.produto_composto ? "S" : "N",
+        dados.preco_promocional ?? 0,
+        dados.em_promocao ? "S" : "N",
+        dados.desconto_maximo ?? 0,
+        dados.situacao_tributaria ?? null,
+        dados.grupo_imposto ?? null,
+        dados.grupo_pis_cofins ?? null,
+        dados.ncm ?? null,
+        dados.cest ?? null,
+        dados.origem ?? null,
+      ]
+    );
+
+    return (await buscarPorId(novoId))!;
+  } catch (erro: any) {
+    throw traduzirErroDeEscrita(erro);
+  }
+}
+
+/**
+ * Atualiza um produto existente. Sem tabela de histórico no Firebird (não
+ * criamos schema novo), então aqui só aplica os campos enviados — não há
+ * mais o registro de valor_anterior/valor_novo que existia no SQLite.
+ */
+export async function atualizar(id: number, dados: ProdutoEditavel): Promise<Produto> {
+  const produtoAtual = await buscarPorId(id);
+  if (!produtoAtual) {
+    throw new Error(`Produto ${id} não encontrado`);
+  }
+
+  const colunas: string[] = [];
+  const valores: any[] = [];
+
+  for (const [campo, coluna] of Object.entries(CAMPO_PARA_COLUNA)) {
+    if (!(campo in dados)) continue;
+    const valor = (dados as any)[campo];
+    if (valor === undefined) continue;
+    colunas.push(`${coluna} = ?`);
+    valores.push(valorParaColuna(campo, valor));
+  }
+
+  if (colunas.length === 0) {
+    return produtoAtual; // nada mudou, evita escrita desnecessária
+  }
+
+  try {
+    await query(`UPDATE ${TABELA} SET ${colunas.join(", ")} WHERE PRODUTOIDO = ?`, [
+      ...valores,
+      id,
+    ]);
+  } catch (erro: any) {
+    throw traduzirErroDeEscrita(erro);
+  }
+
+  return (await buscarPorId(id))!;
+}
+
+/**
+ * Upsert usado pela importação de planilha: se já existe produto com o
+ * mesmo código de barras, atualiza; senão, cria um novo registro.
+ */
+export async function upsertPorCodigoBarras(
+  codigoBarras: string,
+  dados: ProdutoEditavel
+): Promise<{ produto: Produto; criado: boolean }> {
+  const existente = await buscarPorCodigoBarras(codigoBarras);
+  if (existente) {
+    const produto = await atualizar(existente.id, dados);
+    return { produto, criado: false };
+  }
+  const produto = await criar({
+    ...dados,
+    codigo_barras: codigoBarras,
+    descricao: dados.descricao ?? "(sem descrição)",
+    preco: dados.preco ?? 0,
+  });
+  return { produto, criado: true };
+}
+
+/**
+ * ATENÇÃO: como esta tabela é do ERP e pode ter vendas/notas vinculadas ao
+ * PRODUTOIDO, optamos por "desativar" (ITEMATIVO = 'N') em vez de fazer
+ * DELETE físico, para não correr o risco de violar integridade referencial
+ * no banco de produção. Se quiser DELETE de verdade, me avise que eu troco.
+ */
+export async function excluir(id: number): Promise<void> {
+  await query(`UPDATE ${TABELA} SET ITEMATIVO = 'N' WHERE PRODUTOIDO = ?`, [id]);
+}
+
+export async function listarTodosNcmsUnicos(): Promise<string[]> {
+  const linhas = await query(
+    `SELECT DISTINCT CLASSFICACAOFISCAL AS NCM FROM ${TABELA}
+     WHERE CLASSFICACAOFISCAL IS NOT NULL AND TRIM(CLASSFICACAOFISCAL) != ''`
+  );
+  return linhas.map((l) => String(l.NCM).trim());
+}
+
+export async function listarTodosParaValidacaoNcm(): Promise<Produto[]> {
+  const linhas = await query(`SELECT * FROM ${TABELA}`);
+  return linhas.map(linhaParaProduto);
+}
+
+export async function listarTodosParaSimilaridade(excluirId?: number): Promise<Produto[]> {
+  const linhas = excluirId
+    ? await query(`SELECT * FROM ${TABELA} WHERE PRODUTOIDO != ?`, [excluirId])
+    : await query(`SELECT * FROM ${TABELA}`);
+  return linhas.map(linhaParaProduto);
+}
