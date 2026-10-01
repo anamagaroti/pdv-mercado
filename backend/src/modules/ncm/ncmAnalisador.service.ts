@@ -72,7 +72,15 @@ function reordenarPorDescricao(
     const scoreA = scoreSimilaridadeDescricao(a.descricao, descricaoProduto);
     const scoreB = scoreSimilaridadeDescricao(b.descricao, descricaoProduto);
     if (Math.abs(scoreB - scoreA) > 0.01) return scoreB - scoreA;
-    const hierarquia = { mesma_subposicao: 0, mesma_posicao: 1, mesmo_capitulo: 2, busca_texto: 3 };
+
+    const hierarquia: Record<string, number> = {
+      mesma_subposicao: 0,
+      mesma_posicao: 1,
+      mesmo_capitulo: 2,
+      busca_texto: 3,
+      busca_hierarquica: 4,
+    };
+
     return (hierarquia[a.origem] ?? 9) - (hierarquia[b.origem] ?? 9);
   });
 }
@@ -155,7 +163,10 @@ export async function analisarNcmsProblematicos(): Promise<GrupoNcmProblematico[
   const resultado: GrupoNcmProblematico[] = [];
 
   for (const [ncmAtual, grupo] of grupos.entries()) {
-    const descricaoRepresentativa = grupo.produtos[0]?.descricao ?? '';
+    const descricaoRepresentativa =
+  obterDescricaoRepresentativaDoGrupo(
+    grupo.produtos
+  );
 
     const { sugestoes, textoBusca, melhorIndice } = await buscarSugestoes(
       ncmAtual,
@@ -175,6 +186,52 @@ export async function analisarNcmsProblematicos(): Promise<GrupoNcmProblematico[
   }
 
   return resultado;
+}
+
+function obterDescricaoRepresentativaDoGrupo(
+  produtos: GrupoNcmProblematico['produtos_afetados']
+): string {
+  if (produtos.length === 0) {
+    return '';
+  }
+
+  if (produtos.length === 1) {
+    return produtos[0].descricao;
+  }
+
+  const tokenSets = produtos.map((produto) =>
+    tokenizar(produto.descricao)
+  );
+
+  /**
+   * Começamos pelas palavras do primeiro produto
+   * e mantemos somente as que aparecem nos demais.
+   */
+  const palavrasComuns = new Set(
+    tokenSets[0]
+  );
+
+  for (const tokens of tokenSets.slice(1)) {
+    for (const palavra of palavrasComuns) {
+      if (!tokens.has(palavra)) {
+        palavrasComuns.delete(palavra);
+      }
+    }
+  }
+
+  /**
+   * Se encontramos palavras realmente comuns,
+   * usamos essas palavras.
+   */
+  if (palavrasComuns.size > 0) {
+    return [...palavrasComuns].join(' ');
+  }
+
+  /**
+   * Caso os produtos sejam muito diferentes,
+   * usamos o primeiro como fallback.
+   */
+  return produtos[0].descricao;
 }
 
 // ── Aplicar correções ─────────────────────────────────────────────────────

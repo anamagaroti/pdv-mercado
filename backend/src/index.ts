@@ -6,6 +6,7 @@ import { errorHandler } from './middleware/errorHandler';
 
 import produtosRoutes from './modules/produtos/produtos.routes';
 import buscaRoutes from './modules/busca/busca.routes';
+import listasApoioRoutes from './modules/listasapoio/listasApoio.routes';
 import ncmRoutes from './modules/ncm/ncm.routes';
 import configuracoesRoutes from './modules/configuracoes/configuracoes.routes';
 
@@ -22,6 +23,7 @@ app.use(express.json({ limit: '5mb' }));
 app.get('/api/saude', (_req, res) => res.json({ status: 'ok' }));
 
 app.use('/api/produtos', produtosRoutes);
+app.use('/api/listas-apoio', listasApoioRoutes);
 app.use('/api/busca', buscaRoutes);
 app.use('/api/ncm', ncmRoutes);
 app.use('/api/configuracoes', configuracoesRoutes);

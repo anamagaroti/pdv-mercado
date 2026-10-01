@@ -11,7 +11,6 @@ import SelectAllIcon from '@mui/icons-material/SelectAll';
 import DeselectIcon from '@mui/icons-material/Deselect';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
-import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import CodeIcon from '@mui/icons-material/Code';
 import LockIcon from '@mui/icons-material/Lock';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
@@ -131,7 +130,7 @@ function PainelCertificado({ onFechar }: { onFechar: () => void }) {
       </Box>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         O certificado é necessário para buscar NF-es automaticamente no SEFAZ do estado emissor.
-        Sem ele, você ainda pode importar pelo XML ou PDF — a chave de acesso será decodificada
+        Sem ele, você ainda pode importar pelo XML — a chave de acesso será decodificada
         e um link para o portal do SEFAZ será gerado para você baixar manualmente.
       </Typography>
       {aviso && <Alert severity={status?.configurado ? 'success' : 'warning'} sx={{ mb: 2 }}>{aviso}</Alert>}
@@ -174,8 +173,7 @@ function PainelCertificado({ onFechar }: { onFechar: () => void }) {
 
 export default function NfePage() {
   const xmlInputRef = useRef<HTMLInputElement>(null);
-  const pdfInputRef = useRef<HTMLInputElement>(null);
-  const [modoImport, setModoImport] = useState<'barcode' | 'pdf' | 'xml'>('barcode');
+  const [modoImport, setModoImport] = useState<'barcode' | 'xml'>('barcode');
   const [nfe, setNfe] = useState<NfeCompleta | null>(null);
   const [chaveInput, setChaveInput] = useState('');
   const [margemGlobal, setMargemGlobal] = useState('40');
@@ -211,12 +209,6 @@ export default function NfePage() {
     onError: (e: any) => setAviso({ tipo: 'error', texto: e?.response?.data?.detalhe ?? 'Erro ao processar XML.' }),
   });
 
-  const mutPdf = useMutation({
-    mutationFn: (f: File) => nfeApi.porPdf(f),
-    onSuccess: processarRespostaChave,
-    onError: (e: any) => setAviso({ tipo: 'error', texto: e?.response?.data?.mensagem ?? 'Erro ao processar PDF.' }),
-  });
-
   const mutChave = useMutation({
     mutationFn: (chave: string) => nfeApi.porChave(chave),
     onSuccess: (data) => {
@@ -235,7 +227,7 @@ export default function NfePage() {
     onError: () => setAviso({ tipo: 'error', texto: 'Erro ao aplicar preços.' }),
   });
 
-  const isLoading = mutXml.isPending || mutPdf.isPending || mutChave.isPending;
+  const isLoading = mutXml.isPending || mutChave.isPending;
 
   const handleMargemGlobalChange = (v: string) => {
     setMargemGlobal(v);
@@ -360,7 +352,7 @@ export default function NfePage() {
                 sx={{ borderBottom: `1px solid ${tokens.color.border}`, bgcolor: tokens.color.bgSurface }}
               >
                 <Tab value="barcode" icon={<QrCodeScannerIcon />} iconPosition="start" label="Bipar código de barras" />
-                <Tab value="pdf" icon={<PictureAsPdfIcon />} iconPosition="start" label="Upload PDF" />
+
                 <Tab value="xml" icon={<CodeIcon />} iconPosition="start" label="Upload XML" />
               </Tabs>
 
@@ -418,23 +410,6 @@ export default function NfePage() {
                         </Button>
                       </Box>
                     </Box>
-                  </Box>
-                )}
-
-                {/* MODO: PDF */}
-                {modoImport === 'pdf' && (
-                  <Box sx={{ textAlign: 'center' }}>
-                    <PictureAsPdfIcon sx={{ fontSize: 48, color: tokens.color.accent, mb: 1.5 }} />
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                      Selecione o PDF do DANFE. O sistema extrai a chave de acesso e busca
-                      a NF-e no SEFAZ (requer certificado digital configurado).
-                    </Typography>
-                    <Button variant="contained" size="large" onClick={() => pdfInputRef.current?.click()}>
-                      Selecionar PDF
-                    </Button>
-                    <input ref={pdfInputRef} type="file" accept=".pdf" hidden onChange={(e) => {
-                      const f = e.target.files?.[0]; if (f) mutPdf.mutate(f); e.target.value = '';
-                    }} />
                   </Box>
                 )}
 

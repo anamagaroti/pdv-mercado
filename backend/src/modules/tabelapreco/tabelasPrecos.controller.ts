@@ -26,7 +26,7 @@ export async function definirPreco(req: Request, res: Response) {
     if (typeof valorVenda !== "number" || isNaN(valorVenda)) {
       return res.status(400).json({ mensagem: "valorVenda deve ser numérico." });
     }
-    await repositorio.definirPrecoProduto(produtoId, tabelaPrecoId, valorVenda);
+    await repositorio.definirPrecoProduto(produtoId, tabelaPrecoId);
     return res.status(204).send();
   } catch (erro: any) {
     return res.status(500).json({ mensagem: erro.message });
