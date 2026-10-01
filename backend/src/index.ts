@@ -6,9 +6,7 @@ import { errorHandler } from './middleware/errorHandler';
 
 import produtosRoutes from './modules/produtos/produtos.routes';
 import buscaRoutes from './modules/busca/busca.routes';
-import importacaoRoutes from './modules/importacao/importacao.routes';
 import ncmRoutes from './modules/ncm/ncm.routes';
-import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import configuracoesRoutes from './modules/configuracoes/configuracoes.routes';
 
 import nfeRoutes from './modules/nfe/nfe.routes';
@@ -25,9 +23,7 @@ app.get('/api/saude', (_req, res) => res.json({ status: 'ok' }));
 
 app.use('/api/produtos', produtosRoutes);
 app.use('/api/busca', buscaRoutes);
-app.use('/api/importacao', importacaoRoutes);
 app.use('/api/ncm', ncmRoutes);
-app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/configuracoes', configuracoesRoutes);
 app.use('/api/nfe', nfeRoutes);
 

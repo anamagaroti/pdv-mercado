@@ -7,6 +7,9 @@ export const api = axios.create({
 
 // ── Tipos espelhados do backend ────────────────────────────────────────────
 
+// api.ts — remova a segunda declaração de `export interface Produto { ... }`
+// (a que aparece antes de `export const nfeApi = {`) e deixe só esta:
+
 export interface Produto {
   id: number;
   descricao: string;
@@ -29,6 +32,8 @@ export interface Produto {
   ncm?: string;
   cest?: string;
   origem?: string;
+  marca_id?: number; // FK -> MARCASPRODUTOS — agora usado no criar() (default 1)
+  grupo_id?: number; // FK -> GRUPOSPRODUTOS — agora usado no criar() (default 1)
 }
 
 // ── Listas de apoio (valores válidos das FKs de produto) ────────────────────
@@ -346,16 +351,11 @@ export interface AplicarPrecoItem {
   unidade: string | null;
   preco_custo: number;
   preco_venda: number;
-  /**
-   * O backend HOJE IGNORA este campo ao aplicar no Firebird: o valor que a
-   * NF-e traz aqui é o CST/CSOSN do imposto, que é um código diferente da
-   * FK SITUACAOTRIBUTARIAIDO do seu ERP. Mantido no tipo só por
-   * compatibilidade; ajuste manualmente na tela de produto depois.
-   */
   situacao_tributaria: string | null;
   unidade_tributavel?: string | null;
   unidades_por_embalagem?: number | null;
 }
+
 
 export const nfeApi = {
   importar: async (arquivo: File) => {
@@ -411,25 +411,6 @@ export const nfeApi = {
 export const dashboardApi = {
   obterEstatisticas: async () => {
     const { data } = await api.get<EstatisticasDashboard>('/dashboard');
-    return data;
-  },
-};
-
-// ── Importação ─────────────────────────────────────────────────────────────
-
-export const importacaoApi = {
-  previa: async (arquivo: File) => {
-    const form = new FormData();
-    form.append('arquivo', arquivo);
-    const { data } = await api.post<PreviaImportacao>('/importacao/previa', form);
-    return data;
-  },
-
-  importar: async (arquivo: File, mapeamento: Record<string, string | null>) => {
-    const form = new FormData();
-    form.append('arquivo', arquivo);
-    form.append('mapeamento', JSON.stringify(mapeamento));
-    const { data } = await api.post<ResultadoImportacao>('/importacao/importar', form);
     return data;
   },
 };

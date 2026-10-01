@@ -1,4 +1,4 @@
-import { query } from "../../db/firebirdPool";
+import { query, queryPdv } from "../../db/firebirdPool";
 import { linhaParaProduto, CAMPO_PARA_COLUNA, valorParaColuna } from "./produtos.mapper";
 import { Produto, ProdutoEditavel, NovoProdutoInput } from "../../types/produto";
 
@@ -115,14 +115,77 @@ export async function listarParaExportacao(
 
 export async function criar(dados: NovoProdutoInput): Promise<Produto> {
   try {
-    const linhas = await query<{ ID: number }>(
-  `SELECT COALESCE(MAX(PRODUTOIDO), 0) + 1 AS ID
-   FROM PRODUTOS`
-);
-
-const novoId = Number(linhas[0].ID);
 
     await query(
+      `INSERT INTO ${TABELA}
+        (
+          DESCRICAO,
+          DESCRICAOCOMPLETA,
+          MARCAIDO,
+          UNIDADEMEDIDA,
+          UNIDADEMEDIDATRIBUTAVEL,
+          QUANTIDADETRIBUTAVEL,
+          TIPOUNIDADE,
+          VALORVENDA,
+          CODIGOBARRA,
+          ITEMATIVO,
+          PRODUTOCOMPOSTO,
+          PRECOPROMOCIONAL,
+          PRODUTOEMPROMOCAO,
+          DESCONTOMAXIMO,
+          GRUPOIDO,
+          SITUACAOTRIBUTARIAIDO,
+          GRUPOIMPOSTOIDO,
+          GRUPOPISCOFINSIDO,
+          CLASSFICACAOFISCAL,
+          CODIGOCEST,
+          ORIGEMPRODUTO
+        )
+       VALUES (
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+       )`,
+      [
+        dados.descricao,
+        dados.descricao_completa ?? dados.descricao,
+        dados.marca_id ?? 1,                 // default MARCAIDO = 1
+        dados.unidade ?? "UN",
+        dados.unidade_medida_tributavel ?? dados.unidade ?? "UN",
+        dados.quantidade_tributavel ?? 1,
+        dados.tipo_unidade ?? "U",                  
+        dados.preco,
+        dados.codigo_barras,
+        dados.ativo === false ? "N" : "S",
+        dados.produto_composto ? "S" : "N",
+        dados.preco_promocional ?? 0,
+        dados.em_promocao ? "S" : "N",
+        dados.desconto_maximo ?? 0,
+        dados.grupo_id ?? 1,                 // default GRUPOIDO = 1
+        dados.situacao_tributaria ?? 'F00',
+        dados.grupo_imposto ?? 1,
+        dados.grupo_pis_cofins ?? 1,
+        dados.ncm ?? '',
+        dados.cest ?? '',
+        dados.origem ?? '',
+      ]
+    );
+
+    const linhas = await query<{ ID: number }>(
+      `SELECT COALESCE(MAX(PRODUTOIDO), 0) AS ID FROM PRODUTOS`
+    );
+    const novoId = Number(linhas[0].ID);
+
+    const produtoFirebird = (await buscarPorId(novoId))!;
+
+    await replicarProdutoPDV(produtoFirebird);
+
+    return produtoFirebird;
+  } catch (erro: any) {
+    throw traduzirErroDeEscrita(erro);
+  }
+}
+
+export async function replicarProdutoPDV(produto: Produto): Promise<void> {
+  await queryPdv(
       `INSERT INTO ${TABELA}
         (
           PRODUTOIDO,
@@ -146,35 +209,59 @@ const novoId = Number(linhas[0].ID);
           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
        )`,
       [
-        novoId,
-        dados.descricao,
-        dados.unidade ?? "UN",
-        dados.preco,
-        dados.codigo_barras,
-        dados.ativo === false ? "N" : "S",
-        dados.produto_composto ? "S" : "N",
-        dados.preco_promocional ?? 0,
-        dados.em_promocao ? "S" : "N",
-        dados.desconto_maximo ?? 0,
-        dados.situacao_tributaria ?? null,
-        dados.grupo_imposto ?? null,
-        dados.grupo_pis_cofins ?? null,
-        dados.ncm ?? null,
-        dados.cest ?? null,
-        dados.origem ?? null,
+        produto.id,
+        produto.descricao,
+        produto.unidade ?? "UN",
+        produto.preco,
+        produto.codigo_barras,
+        produto.ativo === false ? "N" : "S",
+        produto.produto_composto ? "S" : "N",
+        produto.preco_promocional ?? 0,
+        produto.em_promocao ? "S" : "N",
+        produto.desconto_maximo ?? 0,
+        produto.situacao_tributaria ?? 'F00',
+        produto.grupo_imposto ?? 1,
+        produto.grupo_pis_cofins ?? 1,
+        produto.ncm ?? '',
+        produto.cest ?? '',
+        produto.origem ?? '',
       ]
     );
+} 
 
-    return (await buscarPorId(novoId))!;
-  } catch (erro: any) {
-    throw traduzirErroDeEscrita(erro);
-  }
-}
+/**
+ * Colunas que existem na tabela PRODUTOS do banco PDV — precisa ficar em
+ * sincronia com replicarProdutoPDV(). Se um campo novo for adicionado na
+ * tabela PDV no futuro, inclua a coluna aqui também.
+ */
+const COLUNAS_PDV = new Set([
+  "DESCRICAO",
+  "UNIDADEMEDIDA",
+  "VALORVENDA",
+  "CODIGOBARRA",
+  "ITEMATIVO",
+  "PRODUTOCOMPOSTO",
+  "PRECOPROMOCIONAL",
+  "PRODUTOEMPROMOCAO",
+  "DESCONTOMAXIMO",
+  "SITUACAOTRIBUTARIAIDO",
+  "GRUPOIMPOSTOIDO",
+  "GRUPOPISCOFINSIDO",
+  "CLASSFICACAOFISCAL",
+  "CODIGOCEST",
+  "ORIGEMPRODUTO",
+]);
 
 /**
  * Atualiza um produto existente. Sem tabela de histórico no Firebird (não
  * criamos schema novo), então aqui só aplica os campos enviados — não há
  * mais o registro de valor_anterior/valor_novo que existia no SQLite.
+ *
+ * Atualiza primeiro o Comer (fonte da verdade) e, se dado com sucesso,
+ * replica os mesmos campos (filtrados pelo schema do PDV) nesse segundo
+ * banco. Se o produto ainda não existir no PDV (por exemplo, cadastrado
+ * antes da réplica dupla existir), cai no INSERT via replicarProdutoPDV
+ * em vez de falhar silenciosamente.
  */
 export async function atualizar(id: number, dados: ProdutoEditavel): Promise<Produto> {
   const produtoAtual = await buscarPorId(id);
@@ -184,13 +271,23 @@ export async function atualizar(id: number, dados: ProdutoEditavel): Promise<Pro
 
   const colunas: string[] = [];
   const valores: any[] = [];
+  const colunasPdv: string[] = [];
+  const valoresPdv: any[] = [];
 
   for (const [campo, coluna] of Object.entries(CAMPO_PARA_COLUNA)) {
     if (!(campo in dados)) continue;
     const valor = (dados as any)[campo];
     if (valor === undefined) continue;
+
+    const valorConvertido = valorParaColuna(campo, valor);
+
     colunas.push(`${coluna} = ?`);
-    valores.push(valorParaColuna(campo, valor));
+    valores.push(valorConvertido);
+
+    if (COLUNAS_PDV.has(coluna)) {
+      colunasPdv.push(`${coluna} = ?`);
+      valoresPdv.push(valorConvertido);
+    }
   }
 
   if (colunas.length === 0) {
@@ -206,7 +303,49 @@ export async function atualizar(id: number, dados: ProdutoEditavel): Promise<Pro
     throw traduzirErroDeEscrita(erro);
   }
 
-  return (await buscarPorId(id))!;
+  const produtoAtualizado = (await buscarPorId(id))!;
+
+  await replicarAtualizacaoPDV(produtoAtualizado.id, colunasPdv, valoresPdv, produtoAtualizado);
+
+  return produtoAtualizado;
+}
+
+/**
+ * Aplica no PDV as mesmas mudanças feitas no Comer. Se o produto não
+ * existir ainda no PDV (registro criado antes da réplica dupla, ou
+ * dessincronizado por algum motivo), cadastra ele agora via
+ * replicarProdutoPDV em vez de deixar o PDV desatualizado.
+ */
+async function replicarAtualizacaoPDV(
+  id: number,
+  colunasPdv: string[],
+  valoresPdv: any[],
+  produtoAtualizado: Produto
+): Promise<void> {
+  if (colunasPdv.length === 0) return; // nenhum campo alterado existe no schema do PDV
+
+  try {
+    // node-firebird não retorna rowCount de forma confiável em UPDATE;
+    // confirmamos a existência do registro consultando de volta.
+    const existeNoPdv = await queryPdv<{ PRODUTOIDO: number }>(
+      `SELECT PRODUTOIDO FROM ${TABELA} WHERE PRODUTOIDO = ?`,
+      [id]
+    );
+
+    if (existeNoPdv.length === 0) {
+      // produto nunca foi replicado — cadastra agora pra reconciliar os bancos
+      await replicarProdutoPDV(produtoAtualizado);
+    }else{
+      await queryPdv(
+      `UPDATE ${TABELA} SET ${colunasPdv.join(", ")} WHERE PRODUTOIDO = ?`,
+      [...valoresPdv, id]
+      );
+    }
+  } catch (erro: any) {
+    // Não deixamos a falha de sincronização com o PDV derrubar a operação
+    // no Comer, que já foi persistida com sucesso. Logamos para investigação.
+    console.error(`[produtos] Falha ao replicar atualização do produto ${id} no PDV:`, erro);
+  }
 }
 
 /**

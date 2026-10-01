@@ -26,9 +26,10 @@ import { buscaApi, ncmApi, Produto, SugestaoNcm, SugestaoSimilar, listasApoioApi
 import { useDebounce } from '../../hooks/useDebounce';
 import { tokens } from '../../theme/tokens';
 import SugestoesSimilaridade from './SugestoesSimilaridade';
+import { useSituacaoTributaria } from "../../hooks/useSituacaoTributaria";
 
 interface NovoProdutoFormProps {
-  codigoBarras: string;
+  codigoBarras?: string;
   salvando: boolean;
   onSalvar: (dados: Partial<Produto>) => void;
   onCancelar: () => void;
@@ -46,20 +47,23 @@ export default function NovoProdutoForm({
   const [situacaoTributaria, setSituacaoTributaria] = useState('');
   const [campoFiscalDe, setCampoFiscalDe] = useState<string | null>(null);
   const [mostrarSugestoesNcm, setMostrarSugestoesNcm] = useState(false);
+  const { options, toBackend, fromBackend } = useSituacaoTributaria();
+  const [codigoBarrasLocal, setCodigoBarrasLocal] = useState(codigoBarras ?? "");
 
   // 1) Tentativa de busca externa pelo código de barras
   const consultaExterna = useQuery({
-    queryKey: ['codigo-externo', codigoBarras],
-    queryFn: () => buscaApi.codigoExterno(codigoBarras),
+   queryKey: ['codigo-externo', codigoBarrasLocal],
+queryFn: () => buscaApi.codigoExterno(codigoBarrasLocal),
+enabled: codigoBarrasLocal.length >= 8,
     staleTime: Infinity,
     retry: false,
   });
 
   useEffect(() => {
-    if (consultaExterna.data?.encontrado && consultaExterna.data.descricao) {
-      setDescricao(consultaExterna.data.descricao);
-    }
-  }, [consultaExterna.data]);
+  if (consultaExterna.data?.encontrado && consultaExterna.data.descricao) {
+    setDescricao(consultaExterna.data.descricao);
+  }
+}, [consultaExterna.data]);
 
   // 2) Busca de produtos similares conforme o operador digita a descrição
   const descricaoDebounced = useDebounce(descricao, 350);
@@ -111,11 +115,14 @@ export default function NovoProdutoForm({
 
   const handleSalvar = () => {
     onSalvar({
-      codigo_barras: codigoBarras,
+      codigo_barras: codigoBarras || codigoBarrasLocal,
       descricao,
       preco: preco ? parseFloat(preco.replace(',', '.')) : undefined,
       ncm: ncm || undefined,
-      situacao_tributaria: situacaoTributaria || undefined,
+      situacao_tributaria:
+        situacaoTributaria
+          ? toBackend(situacaoTributaria)
+          : undefined,
     });
   };
 
@@ -139,37 +146,33 @@ export default function NovoProdutoForm({
         />
       </Box>
 
-      {/* Código de barras — sempre visível e preenchido */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1.5,
-          mb: 2.5,
-          p: 1.5,
-          borderRadius: tokens.radius.sm + 'px',
-          bgcolor: tokens.color.bgSurfaceRaised,
-          border: `1px solid ${tokens.color.border}`,
-        }}
-      >
-        <QrCodeIcon sx={{ color: tokens.color.scan, fontSize: 20, flexShrink: 0 }} />
-        <Box>
-          <Typography variant="caption" sx={{ color: tokens.color.textTertiary, display: 'block', mb: 0.25 }}>
-            Código de barras
-          </Typography>
-          <Typography
-            sx={{
-              fontFamily: tokens.font.mono,
-              fontWeight: 600,
-              fontSize: 18,
-              color: tokens.color.textPrimary,
-              letterSpacing: 1,
-            }}
-          >
-            {codigoBarras}
-          </Typography>
-        </Box>
-      </Box>
+      <TextField
+  label="Código de barras *"
+  fullWidth
+  autoFocus
+  value={codigoBarrasLocal}
+  onChange={(e) => setCodigoBarrasLocal(e.target.value)}
+  onKeyDown={async (e) => {
+    if (e.key !== "Enter") return;
+
+    try {
+      const resultado = await buscaApi.codigoExterno(codigoBarrasLocal);
+
+      if (resultado.encontrado && resultado.descricao) {
+        setDescricao(resultado.descricao);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }}
+  InputProps={{
+    startAdornment: (
+      <InputAdornment position="start">
+        <QrCodeIcon />
+      </InputAdornment>
+    ),
+  }}
+/>
 
       {/* Retorno da API externa */}
       {consultaExterna.isLoading && (
@@ -334,19 +337,20 @@ export default function NovoProdutoForm({
 
         <Grid item xs={12} sm={4}>
           <TextField
-            label="Situação tributária"
-            select
-            fullWidth
-            value={situacaoTributaria}
-            onChange={(e) => setSituacaoTributaria(e.target.value)}
-          >
-            <MenuItem value="">— nenhuma —</MenuItem>
-            {situacoesTributarias.map((o) => (
-              <MenuItem key={o.id} value={o.id}>
-                {o.id} — {o.descricao}
-              </MenuItem>
-            ))}
-          </TextField>
+  label="Situação tributária"
+  select
+  fullWidth
+  value={situacaoTributaria}
+  onChange={(e) => setSituacaoTributaria(e.target.value)}
+>
+  <MenuItem value="">— nenhuma —</MenuItem>
+
+  {options.map((o) => (
+    <MenuItem key={o.value} value={o.value}>
+      {o.label}
+    </MenuItem>
+  ))}
+</TextField>
         </Grid>
       </Grid>
 

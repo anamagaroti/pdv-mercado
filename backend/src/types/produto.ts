@@ -18,10 +18,10 @@ export interface Produto {
   id: number; // PRODUTOIDO
   descricao: string; // DESCRICAO
   descricao_completa?: string; // DESCRICAOCOMPLETA
-  unidade?: string; // UNIDADEMEDIDA (unidade comercial, ex.: CX, PC)
+  unidade: string; // UNIDADEMEDIDA (unidade comercial, ex.: CX, PC)
   unidade_medida_tributavel?: string; // UNIDADEMEDIDATRIBUTAVEL (unidade individual, ex.: UN)
   quantidade_tributavel?: number; // QUANTIDADETRIBUTAVEL (quantas unidades tributáveis tem em 1 unidade comercial — ex.: 12 latas por caixa)
-  tipo_unidade?: string; // TIPOUNIDADE
+  tipo_unidade: string; // TIPOUNIDADE
   preco: number; // VALORVENDA
   /**
    * NÃO existe em PRODUTOS. É calculado pelo repository a partir de
@@ -43,6 +43,8 @@ export interface Produto {
   ncm?: string; // CLASSFICACAOFISCAL
   cest?: string; // CODIGOCEST
   origem?: string; // ORIGEMPRODUTO
+  marca_id?: number; // MARCAIDO (FK -> MARCA)
+  grupo_id?: number; // GRUPOIDO (FK -> GRUPO)
 }
 
 /** Campos que podem ser enviados em uma atualização (PUT). */

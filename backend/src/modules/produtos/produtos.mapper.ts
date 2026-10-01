@@ -27,10 +27,8 @@ export function linhaParaProduto(linha: any): Produto {
     id: Number(linha.PRODUTOIDO),
     descricao: String(linha.DESCRICAO ?? "").trim(),
     descricao_completa: textoOuIndefinido(linha.DESCRICAOCOMPLETA),
-    unidade: textoOuIndefinido(linha.UNIDADEMEDIDA),
     unidade_medida_tributavel: textoOuIndefinido(linha.UNIDADEMEDIDATRIBUTAVEL),
     quantidade_tributavel: numeroOuIndefinido(linha.QUANTIDADETRIBUTAVEL),
-    tipo_unidade: textoOuIndefinido(linha.TIPOUNIDADE),
     preco: numeroOuIndefinido(linha.VALORVENDA) ?? 0,
     preco_promocional: numeroOuIndefinido(linha.PRECOPROMOCIONAL),
     em_promocao: boolDeSN(linha.PRODUTOEMPROMOCAO),
@@ -44,6 +42,11 @@ export function linhaParaProduto(linha: any): Produto {
     ncm: textoOuIndefinido(linha.CLASSFICACAOFISCAL),
     cest: textoOuIndefinido(linha.CODIGOCEST),
     origem: textoOuIndefinido(linha.ORIGEMPRODUTO),
+    unidade: String(linha.UNIDADEMEDIDA ?? "").trim(),
+    tipo_unidade: String(linha.TIPOUNIDADE ?? "").trim(),
+    preco_custo: numeroOuIndefinido(linha.VALORCUSTO),
+    marca_id: numeroOuIndefinido(linha.MARCAIDO),
+    grupo_id: numeroOuIndefinido(linha.GRUPOIDO),
   };
 }
 

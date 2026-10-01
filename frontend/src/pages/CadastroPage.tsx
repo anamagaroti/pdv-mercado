@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Typography, Snackbar, Alert } from '@mui/material';
+import { Box, Typography, Snackbar, Alert, Button } from '@mui/material';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import PageHeader from '../components/layout/PageHeader';
 import ScanField from '../components/cadastro/ScanField';
@@ -85,7 +85,26 @@ export default function CadastroPage() {
               Aguardando leitura do código de barras...
             </Typography>
           </Box>
+          
         )}
+        {estado.tipo === 'aguardando' && (
+          <Box sx={{ textAlign: 'center', mt: 2 }}>
+            <Button
+  variant="outlined"
+  color="secondary"
+  onClick={() =>
+    setEstado({
+      tipo: "produto_novo",
+      codigoBarras: "",
+    })
+  }
+  disabled={carregandoBusca}
+>
+  Cadastrar Produto
+</Button>
+          </Box>
+        )}
+        
 
         {estado.tipo === 'produto_existente' && (
           <Box sx={{ mt: 3 }}>

@@ -65,16 +65,13 @@ async function baixarDaFonteOficial(): Promise<ItemTabelaNcm[]> {
   const nomenclaturas = resposta.data?.Nomenclaturas ?? [];
 
   return nomenclaturas
-    .map((n: any) => ({
-      codigo: normalizarCodigo(String(n.Codigo ?? '')),
-      descricao: n.Descricao ?? '',
-      dataInicio: n.Data_Inicio ?? null,
-      dataFim: n.Data_Fim ?? null,
-    }))
-    // A tabela traz também capítulos/posições (códigos com menos de 8
-    // dígitos, usados como cabeçalhos hierárquicos). Para a validação de
-    // NCM de produto, nos interessam apenas os códigos completos (8 dígitos).
-    .filter((item: ItemTabelaNcm) => item.codigo.length === 8);
+  .map((n: any) => ({
+    codigo: normalizarCodigo(String(n.Codigo ?? '')),
+    descricao: n.Descricao ?? '',
+    dataInicio: n.Data_Inicio ?? null,
+    dataFim: n.Data_Fim ?? null,
+  }))
+  .filter((item: ItemTabelaNcm) => item.codigo.length > 0);
 }
 
 /**

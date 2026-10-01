@@ -14,8 +14,6 @@ import {
 import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
-import UploadFileIcon from '@mui/icons-material/UploadFile';
-import DashboardIcon from '@mui/icons-material/Dashboard';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import { tokens } from '../../theme/tokens';
@@ -28,8 +26,6 @@ const ROTAS = [
   { path: '/produtos', label: 'Produtos', icon: <ListAltIcon /> },
   { path: '/nfe', label: 'NF-e de Compra', icon: <ReceiptLongIcon /> },
   { path: '/ncm', label: 'Validar NCM', icon: <FactCheckIcon /> },
-  { path: '/importacao', label: 'Importação', icon: <UploadFileIcon /> },
-  { path: '/dashboard', label: 'Dashboard', icon: <DashboardIcon /> },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {

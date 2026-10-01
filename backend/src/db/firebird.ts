@@ -27,3 +27,16 @@ export function obterOptions(): Firebird.Options {
     pageSize: 4096,
   } as Firebird.Options;
 }
+
+/** Opções do banco PDV — mesmo padrão, prefixo FIREBIRD_PDV_*. */
+export function obterOptionsPdv(): Firebird.Options {
+  return {
+    host: obrigatorio("FIREBIRD_PDV_HOST", process.env.FIREBIRD_PDV_HOST),
+    port: Number(process.env.FIREBIRD_PDV_PORT) || 3050,
+    database: obrigatorio("FIREBIRD_PDV_DATABASE", process.env.FIREBIRD_PDV_DATABASE),
+    user: obrigatorio("FIREBIRD_PDV_USER", process.env.FIREBIRD_PDV_USER),
+    password: obrigatorio("FIREBIRD_PDV_PASSWORD", process.env.FIREBIRD_PDV_PASSWORD),
+    lowercase_keys: false,
+    pageSize: 4096,
+  } as Firebird.Options;
+}

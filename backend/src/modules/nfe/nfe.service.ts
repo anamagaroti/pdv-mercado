@@ -283,7 +283,6 @@ export async function aplicarPrecos(itens: AplicarPrecoItem[]): Promise<{
         preco: item.preco_venda,
         ncm: item.ncm ?? undefined,
         cest: item.cest ?? undefined,
-        cfop: item.cfop ?? undefined,
         unidade: item.unidade ?? undefined,
         unidade_medida_tributavel: item.unidade_tributavel ?? undefined,
         quantidade_tributavel: item.unidades_por_embalagem ?? undefined,
@@ -293,21 +292,14 @@ export async function aplicarPrecos(itens: AplicarPrecoItem[]): Promise<{
         await produtosService.atualizar(item.produto_id, dadosProduto);
         await definirCustoSePossivel(item.produto_id, item.preco_custo);
         atualizados++;
-      } else if (item.codigo_barras) {
-        const existente = await produtosService.buscarPorCodigoBarras(item.codigo_barras);
-        if (existente) {
-          await produtosService.atualizar(existente.id, dadosProduto);
-          await definirCustoSePossivel(existente.id, item.preco_custo);
-          atualizados++;
-        } else {
-          const criado = await produtosService.criar({
-            codigo_barras: item.codigo_barras,
-            descricao: item.descricao,
-            ...dadosProduto,
-          });
-          await definirCustoSePossivel(criado.id, item.preco_custo);
-          criados++;
-        }
+      } else {
+        const criado = await produtosService.criar({
+          codigo_barras: item.codigo_barras ?? '',
+          descricao: item.descricao,
+          ...dadosProduto,
+        });
+        await definirCustoSePossivel(criado.id, item.preco_custo);
+        criados++;
       }
     } catch (e: any) {
       erros.push({ descricao: item.descricao, erro: e.message });
@@ -315,4 +307,4 @@ export async function aplicarPrecos(itens: AplicarPrecoItem[]): Promise<{
   }
 
   return { atualizados, criados, erros };
-} 
+}

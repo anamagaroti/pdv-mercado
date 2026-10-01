@@ -2,12 +2,11 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import * as nfeService from './nfe.service';
 import * as certService from './certificado.service';
-import { extrairChaveDoPdf } from './nfePdf.service';
 import { decodificarChave } from './nfeChave.service';
 import { consultarNfeSefaz } from './nfeSefaz.service';
 import db from '../../db/database';
 import { importarNfe } from './nfe.service';
-import { consultarDistribuicaoDFe } from './Nfedistribuicaodfe.service';
+import { consultarDistribuicaoDFe } from './nfedistribuicaodfe.service';
 import { obterCnpjEmpresa } from '../configuracoes/configEmpresa.service';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
@@ -23,35 +22,6 @@ router.post('/importar', upload.single('arquivo'), async (req: Request, res: Res
   } catch (e: any) {
     return res.status(400).json({ mensagem: 'Erro ao processar NF-e.', detalhe: e.message });
   }
-});
-
-// ── PDF ────────────────────────────────────────────────────────────────────
-
-router.post('/por-pdf', upload.single('arquivo'), async (req: Request, res: Response) => {
-  if (!req.file) return res.status(400).json({ mensagem: 'Nenhum arquivo enviado.' });
-
-  const resultado = await extrairChaveDoPdf(req.file.buffer);
-  if (!resultado.sucesso || !resultado.chave) {
-    return res.status(422).json({ mensagem: resultado.erro, textoBruto: resultado.textoBruto });
-  }
-
-  const dec = resultado.chaveDecodificada!;
-
-  const consultaSefaz = await consultarNfeSefaz(dec.chave, dec.cUF);
-  if (consultaSefaz.sucesso && consultaSefaz.xmlNfe) {
-    try {
-      const nfe = await nfeService.importarNfe(Buffer.from(consultaSefaz.xmlNfe, 'utf-8'));
-      return res.json({ origem: 'sefaz', nfe });
-    } catch { /* cai no retorno parcial */ }
-  }
-
-  return res.json({
-    origem: 'chave_parcial',
-    chave: dec,
-    requerCertificado: consultaSefaz.requerCertificado ?? false,
-    mensagemSefaz: consultaSefaz.erro,
-    urlConsultaPortal: dec.urlConsultaPortal,
-  });
 });
 
 // ── Chave de barras (bipagem) ──────────────────────────────────────────────
